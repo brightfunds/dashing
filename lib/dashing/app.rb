@@ -91,7 +91,7 @@ end
 get '/events', provides: 'text/event-stream' do
   protected!
   response.headers['X-Accel-Buffering'] = 'no' # Disable buffering for nginx
-  stream do |out|
+  stream(true) do |out|
     settings.connections << connection = {out: out, mutex: Mutex.new}
 
     out << settings.history[:latest_events]
