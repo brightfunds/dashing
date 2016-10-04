@@ -76,7 +76,6 @@ module Dashing
       # TODO correctly handle pidfile location change in puma config
       daemon_pidfile = !args.include?('--pidfile') ? "--pidfile #{PID_FILE}" : args
       command = "bundle exec pumactl #{daemon_pidfile} stop"
-      puts command.inspect
       run_command(command)
     end
 
