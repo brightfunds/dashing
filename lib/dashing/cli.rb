@@ -62,20 +62,16 @@ module Dashing
     desc "start", "Starts the server in style!"
     method_option :job_path, :desc => "Specify the directory where jobs are stored"
     def start(*args)
-      daemonize = args.include?('-d')
+      port_option = args.include?('-p') ? '' : ' -p 3030'
       args = args.join(' ')
-      command = "bundle exec puma #{args}"
+      command = "bundle exec thin -R config.ru start#{port_option} #{args}"
       command.prepend "export JOB_PATH=#{options[:job_path]}; " if options[:job_path]
-      command.prepend "export DAEMONIZE=true; " if daemonize
       run_command(command)
     end
 
     desc "stop", "Stops the puma server (daemon mode only)"
     def stop(*args)
-      args = args.join(' ')
-      # TODO correctly handle pidfile location change in puma config
-      daemon_pidfile = !args.include?('--pidfile') ? "--pidfile #{PID_FILE}" : args
-      command = "bundle exec pumactl #{daemon_pidfile} stop"
+      command = "bundle exec thin stop"
       run_command(command)
     end
 

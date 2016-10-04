@@ -101,24 +101,14 @@ class CLITest < Dashing::Test
     assert_includes output, 'Could not find gist at '
   end
 
-  def test_start_task_starts_puma_with_default_port
-    command = 'bundle exec puma '
+  def test_start_task_starts_thin_with_default_port
+    command = 'bundle exec thin -R config.ru start -p 3030 '
     @cli.stubs(:run_command).with(command).once
     @cli.start
   end
 
-  def test_start_task_starts_puma_in_daemon_mode
-      commands =  [
-          'export DAEMONIZE=true; ',
-          'bundle exec puma -d'
-      ]
-
-      @cli.stubs(:run_command).with(commands.join('')).once
-      @cli.start('-d')
-  end
-
-  def test_start_task_starts_puma_with_specified_port
-    command = 'bundle exec puma -p 2020'
+  def test_start_task_starts_thin_with_specified_port
+    command = 'bundle exec thin -R config.ru start -p 2020'
     @cli.stubs(:run_command).with(command).once
     @cli.start('-p', '2020')
   end
@@ -126,7 +116,7 @@ class CLITest < Dashing::Test
   def test_start_task_supports_job_path_option
     commands = [
       'export JOB_PATH=other_spot; ',
-      'bundle exec puma '
+      'bundle exec thin -R config.ru start -p 3030 '
     ]
 
     @cli.stubs(:options).returns(job_path: 'other_spot')
@@ -134,8 +124,8 @@ class CLITest < Dashing::Test
     @cli.start
   end
 
-  def test_stop_task_stops_puma_server
-    @cli.stubs(:run_command).with("bundle exec pumactl --pidfile #{Dir.pwd}/tmp/pids/puma.pid stop")
+  def test_stop_task_stops_thin_server
+    @cli.stubs(:run_command).with('bundle exec thin stop')
     @cli.stop
   end
 

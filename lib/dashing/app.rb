@@ -6,10 +6,10 @@ require 'connection_pool'
 require 'sass'
 require 'sinatra'
 require 'sinatra/content_for'
-require 'sinatra/streaming'
 require 'sprockets'
 require 'yaml'
 require 'uri'
+require 'thin'
 
 SCHEDULER = Rufus::Scheduler.new
 REDIS_CHANNEL = 'dashing/events'.freeze
@@ -59,12 +59,12 @@ set :root, Dir.pwd
 set :sprockets,     Sprockets::Environment.new(settings.root)
 set :assets_prefix, '/assets'
 set :digest_assets, false
-set server: 'puma', connections: [], history_file: 'history.yml'
 set :public_folder, File.join(settings.root, 'public')
 set :views, File.join(settings.root, 'dashboards')
 set :default_dashboard, nil
 set :auth_token, nil
 
+set server: 'thin', connections: []
 set history: Redis::HashKey.new('dashing/history', marshal: true)
 
 %w(javascripts stylesheets fonts images).each do |path|
@@ -77,10 +77,6 @@ end
 
 not_found do
   send_file File.join(settings.public_folder, '404.html'), status: 404
-end
-
-at_exit do
-  File.write(settings.history_file, settings.history.to_yaml)
 end
 
 get '/' do
@@ -96,18 +92,10 @@ get '/events', provides: 'text/event-stream' do
   protected!
   response.headers['X-Accel-Buffering'] = 'no' # Disable buffering for nginx
   stream do |out|
+    settings.connections << connection = {out: out, mutex: Mutex.new}
+
     out << settings.history[:latest_events]
-    settings.connections << connection = {out: out, mutex: Mutex.new, terminated: false}
-    terminated = false
-
-    loop do
-      connection[:mutex].synchronize do
-        terminated = true if connection[:terminated]
-      end
-      break if terminated
-    end
-
-    settings.connections.delete(connection)
+    out.callback { settings.connections.delete(connection) }
   end
 end
 
@@ -154,6 +142,17 @@ get '/views/:widget?.html' do
   end
 end
 
+Thin::Server.class_eval do
+  def stop_with_connection_closing
+    Sinatra::Application.settings.connections.dup.each(&:close)
+
+    stop_without_connection_closing
+  end
+
+  alias_method :stop_without_connection_closing, :stop
+  alias_method :stop, :stop_with_connection_closing
+end
+
 def history
   Sinatra::Application.settings.history
 end
@@ -171,12 +170,10 @@ end
 def send_to_connections(event)
   Sinatra::Application.settings.connections.each do |connection|
     connection[:mutex].synchronize do
+      out = connection[:out]
       begin
-        connection[:out] << event unless connection[:out].closed?
-      rescue Puma::ConnectionError
-        connection[:terminated] = true
-      rescue Exception => e
-        connection[:terminated] = true
+        out << event unless out.closed?
+      rescue => e
         puts e
       end
     end

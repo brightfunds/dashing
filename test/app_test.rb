@@ -13,7 +13,6 @@ class AppTest < Dashing::Test
     app.settings.connections = [ @connection ]
     app.settings.auth_token = nil
     app.settings.default_dashboard = nil
-    app.settings.history_file = File.join(Dir.tmpdir, 'history.yml')
   end
 
   def test_redirect_to_first_dashboard
