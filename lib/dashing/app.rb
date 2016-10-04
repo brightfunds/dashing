@@ -7,6 +7,8 @@ require 'sass'
 require 'sinatra'
 require 'sinatra/content_for'
 require 'sprockets'
+require 'uglifier'
+require 'execjs'
 require 'yaml'
 require 'uri'
 require 'thin'
@@ -58,7 +60,6 @@ end
 set :root, Dir.pwd
 set :sprockets,     Sprockets::Environment.new(settings.root)
 set :assets_prefix, '/assets'
-set :digest_assets, false
 set :public_folder, File.join(settings.root, 'public')
 set :views, File.join(settings.root, 'dashboards')
 set :default_dashboard, nil
@@ -69,6 +70,14 @@ set history: Redis::HashKey.new('dashing/history', marshal: true)
 
 %w(javascripts stylesheets fonts images).each do |path|
   settings.sprockets.append_path("assets/#{path}")
+end
+
+configure :production do
+  set :static, :true
+  set :static_cache_control, [:public, { max_age:  60 * 60 * 24 * 365 }]
+
+  settings.sprockets.css_compressor = :scss
+  settings.sprockets.js_compressor  = Uglifier.new(mangle: false)
 end
 
 ['widgets', File.expand_path('../../../javascripts', __FILE__)]. each do |path|

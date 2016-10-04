@@ -24,7 +24,8 @@ Gem::Specification.new do |s|
   s.add_dependency('thin', '~> 1.6.1')
   s.add_dependency('rufus-scheduler', '~> 2.0.24')
   s.add_dependency('thor', '~> 0.19')
-  s.add_dependency('sprockets', '~> 2.10.1')
+  s.add_dependency('sprockets', '~> 2.12.4')
+  s.add_dependency('uglifier', '= 2.7.2')
   s.add_dependency('rack', '~> 1.5.4')
 
   s.add_dependency('redis-objects', '~> 1.2.1')
