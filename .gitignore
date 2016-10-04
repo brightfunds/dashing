@@ -5,3 +5,4 @@ coverage/
 log/
 .ruby-version
 history.yml
+.bundle/

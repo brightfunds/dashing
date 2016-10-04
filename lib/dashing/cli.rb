@@ -3,6 +3,11 @@ require 'open-uri'
 
 module Dashing
   class CLI < Thor
+    PID_DIR = File.join(Dir.pwd, 'tmp', 'pids').to_s.freeze
+    PID_FILE = File.join(PID_DIR, 'puma.pid')
+
+    system "mkdir -p #{PID_DIR}"
+
     include Thor::Actions
 
     attr_reader :name
@@ -69,8 +74,9 @@ module Dashing
     def stop(*args)
       args = args.join(' ')
       # TODO correctly handle pidfile location change in puma config
-      daemon_pidfile = !args.include?('--pidfile') ? '--pidfile ./tmp/pids/puma.pid' : args
+      daemon_pidfile = !args.include?('--pidfile') ? "--pidfile #{PID_FILE}" : args
       command = "bundle exec pumactl #{daemon_pidfile} stop"
+      puts command.inspect
       run_command(command)
     end
 

@@ -135,7 +135,7 @@ class CLITest < Dashing::Test
   end
 
   def test_stop_task_stops_puma_server
-    @cli.stubs(:run_command).with('bundle exec pumactl --pidfile ./tmp/pids/puma.pid stop')
+    @cli.stubs(:run_command).with("bundle exec pumactl --pidfile #{Dir.pwd}/tmp/pids/puma.pid stop")
     @cli.stop
   end
 

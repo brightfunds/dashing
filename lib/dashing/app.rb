@@ -1,14 +1,18 @@
 require 'coffee-script'
 require 'json'
 require 'rufus/scheduler'
+require 'redis-objects'
+require 'connection_pool'
 require 'sass'
 require 'sinatra'
 require 'sinatra/content_for'
 require 'sinatra/streaming'
 require 'sprockets'
 require 'yaml'
+require 'uri'
 
 SCHEDULER = Rufus::Scheduler.new
+REDIS_CHANNEL = 'dashing/events'.freeze
 
 def development?
   ENV['RACK_ENV'] == 'development'
@@ -16,6 +20,27 @@ end
 
 def production?
   ENV['RACK_ENV'] == 'production'
+end
+
+def redis_connection_pool_config
+  { size:    ENV.fetch('REDIS_POOL_SIZE', 5),
+    timeout: ENV.fetch('REDIS_POOL_TIMEOUT', 5) }
+end
+
+def new_redis_connection
+  uri = URI.parse(ENV['REDIS_URI'] || 'redis://localhost:6379')
+
+  Redis.new(host: uri.host, port: uri.port, password: uri.password)
+end
+
+Redis::Objects.redis = ConnectionPool.new(redis_connection_pool_config) { new_redis_connection }
+
+Thread.new do
+  new_redis_connection.subscribe(REDIS_CHANNEL) do |on|
+    on.message do |channel, message|
+      send_to_connections message
+    end
+  end
 end
 
 helpers Sinatra::ContentFor
@@ -40,11 +65,7 @@ set :views, File.join(settings.root, 'dashboards')
 set :default_dashboard, nil
 set :auth_token, nil
 
-if File.exists?(settings.history_file)
-  set history: YAML.load_file(settings.history_file)
-else
-  set history: {}
-end
+set history: Redis::HashKey.new('dashing/history', marshal: true)
 
 %w(javascripts stylesheets fonts images).each do |path|
   settings.sprockets.append_path("assets/#{path}")
@@ -75,7 +96,7 @@ get '/events', provides: 'text/event-stream' do
   protected!
   response.headers['X-Accel-Buffering'] = 'no' # Disable buffering for nginx
   stream do |out|
-    out << latest_events
+    out << settings.history[:latest_events]
     settings.connections << connection = {out: out, mutex: Mutex.new, terminated: false}
     terminated = false
 
@@ -105,7 +126,7 @@ post '/dashboards/:id' do
   body = JSON.parse(request.body.read)
   body['dashboard'] ||= params['id']
   if authenticated?(body.delete("auth_token"))
-    send_event(params['id'], body, 'dashboards')
+    create_event_and_send_event(params['id'], body, 'dashboards')
     204 # response without entity body
   else
     status 401
@@ -117,7 +138,7 @@ post '/widgets/:id' do
   request.body.rewind
   body = JSON.parse(request.body.read)
   if authenticated?(body.delete("auth_token"))
-    send_event(params['id'], body)
+    create_event_and_send_event(params['id'], body)
     204 # response without entity body
   else
     status 401
@@ -133,11 +154,21 @@ get '/views/:widget?.html' do
   end
 end
 
-def send_event(id, body, target=nil)
+def history
+  Sinatra::Application.settings.history
+end
+
+def create_event_and_send_event(id, body, target = nil)
   body[:id] = id
   body[:updatedAt] ||= Time.now.to_i
+
   event = format_event(body.to_json, target)
-  Sinatra::Application.settings.history[id] = event unless target == 'dashboards'
+
+  add_to_history id, event unless target == 'dashboards'
+  publish_to_redis event
+end
+
+def send_to_connections(event)
   Sinatra::Application.settings.connections.each do |connection|
     connection[:mutex].synchronize do
       begin
@@ -152,22 +183,31 @@ def send_event(id, body, target=nil)
   end
 end
 
+def publish_to_redis(event)
+  Redis.current.publish REDIS_CHANNEL, event
+end
+
+def add_to_history(id, event)
+  Redis.current.multi do
+    history[id] = event
+    history[:latest_events] = history.each.inject("") do |str, (key, body)|
+      str << body unless key == 'latest_events'
+      str
+    end
+  end
+end
+
 def format_event(body, name=nil)
   str = ""
   str << "event: #{name}\n" if name
   str << "data: #{body}\n\n"
 end
 
-def latest_events
-  settings.history.inject("") do |str, (id, body)|
-    str << body
-  end
-end
-
 def first_dashboard
   files = Dir[File.join(settings.views, '*')].collect { |f| File.basename(f, '.*') }
-  files -= ['layout']
-  files.sort.first
+  files.reject! { |file| file =~ /\A_|\Alayout\z/ }
+  files.sort!
+  files.first
 end
 
 def tilt_html_engines
