@@ -30,7 +30,7 @@ def redis_connection_pool_config
 end
 
 def new_redis_connection
-  uri = URI.parse(ENV['REDIS_URI'] || 'redis://localhost:6379')
+  uri = URI.parse(ENV['REDIS_URI'] || ENV['REDIS_URL'] || 'redis://localhost:6379')
 
   Redis.new(host: uri.host, port: uri.port, password: uri.password)
 end
