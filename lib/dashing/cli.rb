@@ -3,11 +3,6 @@ require 'open-uri'
 
 module Dashing
   class CLI < Thor
-    PID_DIR = File.join(Dir.pwd, 'tmp', 'pids').to_s.freeze
-    PID_FILE = File.join(PID_DIR, 'puma.pid')
-
-    system "mkdir -p #{PID_DIR}"
-
     include Thor::Actions
 
     attr_reader :name
