@@ -1,5 +1,6 @@
 require 'thor'
 require 'open-uri'
+require 'redis'
 
 module Dashing
   class CLI < Thor
@@ -76,6 +77,13 @@ module Dashing
       self.class.auth_token = auth_token
       f = File.join(Dir.pwd, "jobs", "#{name}.rb")
       require_file(f)
+    end
+
+    desc "clear_history", "Clear all history from Redis"
+    def clear_history
+      uri = URI.parse(ENV['REDIS_URI'] || ENV['REDIS_URL'] || 'redis://localhost:6379')
+      redis = Redis.new(host: uri.host, port: uri.port, password: uri.password)
+      redis.del 'dashing/history'
     end
 
     # map some commands
