@@ -25,8 +25,8 @@ def production?
 end
 
 def redis_connection_pool_config
-  { size:    ENV.fetch('REDIS_POOL_SIZE', 5),
-    timeout: ENV.fetch('REDIS_POOL_TIMEOUT', 5) }
+  { size:    ENV.fetch('REDIS_POOL_SIZE', 5).to_i,
+    timeout: ENV.fetch('REDIS_POOL_TIMEOUT', 5).to_i }
 end
 
 def new_redis_connection
